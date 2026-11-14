@@ -1,0 +1,36 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+
+# VS Code settings
+.vscode/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PyTorch model checkpoints
+*.pt
+*.pth
+*.ckpt
+
+# Hugging Face cache
+.cache/
+models/
+
+# Generated BERT embeddings
+embeddings/
+*.npy
+*.npz
+
+# Training logs
+logs/
+runs/
