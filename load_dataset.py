@@ -1,30 +1,18 @@
 from pathlib import Path
 import pyarrow.parquet as pq
+from datasets import load_dataset
 
 from tqdm import tqdm
 
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 
-PROJECT_DIRECTORY = Path(__file__).parent
-DATA_DIRECTORY = PROJECT_DIRECTORY / "cleaned"
+DATASET_ID = "siddharthmb/article-bias-prediction-media-splits"
+HF_DATASET = load_dataset(DATASET_ID)
 
 
 def load_articles(split="train"):
-    filenames = {
-        "train": "train-00000-of-00001.parquet",
-        "valid": "valid-00000-of-00001.parquet",
-        "test": "test-00000-of-00001.parquet"
-    }
-
-    file_path = DATA_DIRECTORY / filenames[split]
-
-    table = pq.read_table(
-        file_path,
-        columns=["content", "bias"]
-    )
-
-    return table.to_pydict()
+    return HF_DATASET[split].select_columns(["content", "bias"]).to_dict()
 
 def data_loader(data, encoder, batch_size=8, shuffle=True):
     embeddings_list = []

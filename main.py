@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from datasets import load_dataset
+
 
 from torch.utils.data import DataLoader, default_collate
 
@@ -17,6 +19,7 @@ import argparse
 
 from gpu_cleanup import free_gpu_resources
 
+DATASET_ID = "siddharthmb/article-bias-prediction-media-splits"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -132,7 +135,6 @@ def run_experiment(
 
 
 def main():
-
     # Free GPU resources before training and testing
     free_gpu_resources()
 
