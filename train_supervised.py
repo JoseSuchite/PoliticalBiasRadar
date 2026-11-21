@@ -1,12 +1,12 @@
 import torch
 
 # trains the ffn_model 
-def ffn_train(model, train_loader, valid_loader, criterion, optimizer, device, epochs, validate_freq=2):
+def train_supervised(model, train_loader, valid_loader, criterion, optimizer, device, epochs, validate_freq=2):
 
     # Move model to GPU/CPU
     model.to(device)
 
-    # Used for printing
+    # Count batches between validation checks
     counter = 0
 
     # Place model in training mode
@@ -14,7 +14,6 @@ def ffn_train(model, train_loader, valid_loader, criterion, optimizer, device, e
 
     # Train for some number of epochs while evaluating
     for e in range(epochs):
-
         # Batch loop
         for inputs, labels in train_loader:
             counter += 1
@@ -30,7 +29,7 @@ def ffn_train(model, train_loader, valid_loader, criterion, optimizer, device, e
             output = model(inputs)
 
             # Calculate loss
-            loss = criterion(output, labels)
+            loss = criterion(output.reshape(-1, output.size(-1)), labels.reshape(-1))
 
             # Backpropagate
             loss.backward()
@@ -57,10 +56,10 @@ def ffn_train(model, train_loader, valid_loader, criterion, optimizer, device, e
 
                         output = model(inputs)
 
-                        val_loss = criterion(output, labels)
+                        val_loss = criterion(output.reshape(-1, output.size(-1)), labels.reshape(-1))
 
-                        val_loss_total += val_loss.item() * labels.size(0)
-                        val_samples += labels.size(0)
+                        val_loss_total += val_loss.item() * labels.numel()
+                        val_samples += labels.numel()
 
                 # Place model back in training mode
                 model.train()

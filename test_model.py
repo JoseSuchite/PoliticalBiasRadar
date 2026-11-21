@@ -7,7 +7,7 @@ from sklearn.metrics import (
     f1_score
 )
 
-def ffn_test(model, test_loader, criterion, device):
+def test_model(model, test_loader, criterion, device):
 
     # Turn off gradient calculations
     with torch.no_grad():
@@ -33,17 +33,22 @@ def ffn_test(model, test_loader, criterion, device):
             output = model(inputs)
 
             # Calculate loss
-            test_loss = criterion(output, labels)
+            test_loss = criterion(output.reshape(-1, output.size(-1)), labels.reshape(-1))
 
-            test_loss_total += test_loss.item() * labels.size(0)
-            total_samples += labels.size(0)
+            test_loss_total += test_loss.item() * labels.numel()
+            total_samples += labels.numel()
+
 
             # Get predicted class
-            pred = torch.argmax(output, dim=1)
+            pred = torch.argmax(output, dim=-1)
+
+            # Flatten the true and predicted labels for evaluation
+            labels = labels.reshape(-1)
+            pred = pred.reshape(-1)
 
             # Place true and predicted labels in lists
-            true_list += list(labels.cpu().tolist())
-            pred_list += list(pred.cpu().tolist())
+            true_list += labels.flatten().cpu().tolist()
+            pred_list += pred.flatten().cpu().tolist()
 
     print(confusion_matrix(true_list, pred_list, labels=[0, 1, 2]))
     print()

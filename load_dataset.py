@@ -1,6 +1,8 @@
 from pathlib import Path
 import pyarrow.parquet as pq
 
+from tqdm import tqdm
+
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -29,7 +31,7 @@ def data_loader(data, encoder, batch_size=8, shuffle=True):
     labels_list = []
 
     # load data by batch so Bert doesnt use all the memory
-    for start_of_batch in range(0, len(data["content"]), batch_size):
+    for start_of_batch in tqdm(range(0, len(data["content"]), batch_size), desc="Loading data", unit="batch"):
         end_of_batch = start_of_batch + batch_size
 
         articles = data["content"][start_of_batch:end_of_batch]
@@ -79,3 +81,25 @@ def create_data_loaders(encoder, batch_size=8):
     )
 
     return train_loader, valid_loader, test_loader
+
+def create_episodes(dataset, episode_length=10, shuffle=True):
+
+    embeddings, labels = dataset.tensors
+
+    if shuffle:
+        indices = torch.randperm(len(labels))
+        embeddings = embeddings[indices]
+        labels = labels[indices]
+
+    n_episodes = len(labels) // episode_length
+    n_samples = n_episodes * episode_length
+
+    embeddings = embeddings[:n_samples].reshape(
+        n_episodes, episode_length, -1
+    )
+
+    labels = labels[:n_samples].reshape(
+        n_episodes, episode_length
+    )
+
+    return TensorDataset(embeddings, labels)

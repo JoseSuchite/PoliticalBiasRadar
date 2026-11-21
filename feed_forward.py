@@ -46,13 +46,7 @@ ffn_learning_rate = 5e-4
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-ffn_model = MulticlassFFN(
-    hidden_dim=hidden_dim,
-    dropout_rate=dropout_rate
-).to(device)
 
-ffn_criterion = nn.CrossEntropyLoss()
-ffn_optimizer = torch.optim.Adam(ffn_model.parameters(), lr=ffn_learning_rate)
 
 
 
