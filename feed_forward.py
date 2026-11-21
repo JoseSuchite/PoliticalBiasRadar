@@ -1,6 +1,6 @@
-from bert_encoder import BERTEncoder, MODEL_NAME
-
+import torch
 import torch.nn as nn
+from torch.utils.data import TensorDataset, DataLoader
 
 class MulticlassFFN(nn.Module):
     def __init__(self, embedding_dim=768, hidden_dim=64, output_dim=3, dropout_rate=0.1):
@@ -49,11 +49,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ffn_model = MulticlassFFN(
     hidden_dim=hidden_dim,
     dropout_rate=dropout_rate
-)
+).to(device)
 
 ffn_criterion = nn.CrossEntropyLoss()
-
 ffn_optimizer = torch.optim.Adam(ffn_model.parameters(), lr=ffn_learning_rate)
 
-ffn_model = ffn_model.to(device)
+
 

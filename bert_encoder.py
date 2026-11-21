@@ -55,19 +55,3 @@ class BERTEncoder:
         embeddings = outputs.last_hidden_state[:, 0, :]
 
         return embeddings.cpu()
-
-if __name__ == "__main__":
-    encoder = BERTEncoder()
-
-    articles = [
-        "Congress passed a new education funding bill.",
-        "The president announced changes to federal tax policy.",
-        "Lawmakers debated immigration reform."
-    ]
-
-    embeddings = encoder.encode_batch(articles)
-
-    print("Embedding shape:", embeddings.shape)
-    print("First article:", embeddings[0, :10])
-    print("Second article:", embeddings[1, :10])
-    print("Third article:", embeddings[2, :10])

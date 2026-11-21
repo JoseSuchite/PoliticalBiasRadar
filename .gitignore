@@ -34,3 +34,6 @@ embeddings/
 # Training logs
 logs/
 runs/
+
+# Creates fake files for testing
+create_fake_cleaned.py

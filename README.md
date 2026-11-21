@@ -9,3 +9,7 @@ https://huggingface.co/datasets/siddharthmb/article-bias-prediction-media-splits
 ## Requirements
 torch
 transformers
+numpy
+pyarrow
+pathlib
+sklearn
