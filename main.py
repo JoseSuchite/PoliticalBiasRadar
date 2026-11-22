@@ -174,9 +174,9 @@ def main():
 
     results = []
 
-    for model_type in ["ffn", "lstm"]:
+    for model_type in args.model:
 
-        for training_type in ["supervised", "rl"]:
+        for training_type in args.method:
 
             print(
                 f"\n========== "
