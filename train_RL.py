@@ -20,7 +20,6 @@ def rl_train(model, train_loader, optimizer, epochs, device):
 
     model.to(device)
     model.train()
-    reward_baseline = 0.0
 
     for epoch in range(epochs):
 
@@ -44,9 +43,7 @@ def rl_train(model, train_loader, optimizer, epochs, device):
 
             # Sample classifications
             actions = policy.sample()
-
-            # Record action log probabilities
-            log_probs = policy.log_prob(actions)
+            correct = actions.eq(labels)
 
             # Calculate reward for each episode
             rewards = longest_streak_reward(actions, labels)
@@ -55,20 +52,21 @@ def rl_train(model, train_loader, optimizer, epochs, device):
             total_reward += rewards.sum().item()
             total_episodes += rewards.numel()
 
-            total_correct += actions.eq(labels).sum().item()
+            total_correct += correct.sum().item()
             total_samples += labels.numel()
 
-            # REINFORCE policy gradient loss and reduce variance with a baseline
-
+            # Flip one prediction at a time to measure its effect on the streak.
+            positions = torch.eye(labels.size(1), dtype=torch.bool, device=labels.device)
+            forced_correct = (correct.unsqueeze(1) | positions).flatten(0, 1).long()
+            forced_wrong = (correct.unsqueeze(1) & ~positions).flatten(0, 1).long()
+            targets = torch.ones_like(forced_correct)
+            reward_if_correct = longest_streak_reward(forced_correct, targets)
+            reward_if_wrong = longest_streak_reward(forced_wrong, targets)
+            credit = (reward_if_correct - reward_if_wrong).reshape_as(labels)
+            correct_probs = policy.probs.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
+            policy_loss = -(credit * correct_probs).sum(dim=1).mean()
             entropy = policy.entropy().mean()
-
-            advantages = rewards - reward_baseline
-
-            policy_loss = -(advantages * log_probs.sum(dim=1)).mean()
-
-            loss =  policy_loss - 0.01 * entropy
-
-            reward_baseline = (0.9 * reward_baseline + 0.1 * rewards.mean().item())
+            loss = policy_loss - 0.01 * entropy
 
             loss.backward()
 
