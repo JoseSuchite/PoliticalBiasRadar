@@ -1,6 +1,7 @@
 from pathlib import Path
 import pyarrow.parquet as pq
 from datasets import load_dataset
+import random
 
 from tqdm import tqdm
 
@@ -24,14 +25,14 @@ def load_articles(split="train", seed=42):
 
         rng = random.Random(seed)
         balancedIndexes = []
-        
-        for label in sorted(indexedLabels()):
+
+        for label in sorted(indexedLabels.keys()):
             balancedIndexes.extend(rng.sample(indexedLabels[label], minOccurance))
         rng.shuffle(balancedIndexes)
 
         data = {
-            "content": [data["content"][i] for i in balanced_indices],
-            "bias": [data["bias"][i] for i in balanced_indices],
+            "content": [data["content"][i] for i in balancedIndexes],
+            "bias": [data["bias"][i] for i in balancedIndexes],
         }
 
     return data
