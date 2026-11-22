@@ -33,7 +33,7 @@ class BERTEncoder:
 
         embedding = outputs.last_hidden_state[:, 0, :]
 
-        return embedding.cpu()
+        return embedding.to("cpu", copy=True)
 
     def encode_batch(self, articles):
         inputs = self.tokenizer(
@@ -54,4 +54,4 @@ class BERTEncoder:
 
         embeddings = outputs.last_hidden_state[:, 0, :]
 
-        return embeddings.cpu()
+        return embeddings.to("cpu", copy=True)
