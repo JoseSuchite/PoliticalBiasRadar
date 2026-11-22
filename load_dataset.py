@@ -11,8 +11,30 @@ DATASET_ID = "siddharthmb/article-bias-prediction-media-splits"
 HF_DATASET = load_dataset(DATASET_ID)
 
 
-def load_articles(split="train"):
-    return HF_DATASET[split].select_columns(["content", "bias"]).to_dict()
+def load_articles(split="train", seed=42):
+    data = HF_DATASET[split].select_columns(["content", "bias"]).to_dict()
+
+    if split in ("train", "valid"):
+        indexedLabels = {}
+
+        for idx, label in enumerate(data["bias"]):
+            indexedLabels.setdefault(label, []).append(idx)
+
+        minOccurance = min(len(idxs) for idxs in indexedLabels.values())
+
+        rng = random.Random(seed)
+        balancedIndexes = []
+        
+        for label in sorted(indexedLabels()):
+            balancedIndexes.extend(rng.sample(indexedLabels[label], minOccurance))
+        rng.shuffle(balancedIndexes)
+
+        data = {
+            "content": [data["content"][i] for i in balanced_indices],
+            "bias": [data["bias"][i] for i in balanced_indices],
+        }
+
+    return data
 
 def data_loader(data, encoder, batch_size=8, shuffle=True):
     embeddings_list = []
