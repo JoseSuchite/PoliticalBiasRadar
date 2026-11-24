@@ -1,9 +1,9 @@
 import torch
-from transformers import AutoTokenizer, AutoModel
 import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
 
+MODEL_NAME = "sentence-transformers/all-mpnet-base-v2"
 
-MODEL_NAME = "google-bert/bert-base-uncased"
 
 class BERTEncoder:
     def __init__(self):
@@ -26,24 +26,22 @@ class BERTEncoder:
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=512,
-            return_overflowing_tokens=True,
-            return_special_tokens_mask=True
+            max_length=384,
+            return_overflowing_tokens=True
         )
 
-        # Track which article each chunk belongs to
         article_mapping = inputs.pop("overflow_to_sample_mapping")
-        special_mask = inputs.pop("special_tokens_mask")
 
         article_embeddings = torch.zeros(
-            len(articles), 768, device=self.device
+            len(articles),
+            self.model.config.hidden_size,
+            device=self.device
         )
 
         token_counts = torch.zeros(
             len(articles), 1, device=self.device
         )
 
-        # Process chunks in small batches to limit GPU memory usage
         chunk_batch_size = 8
 
         with torch.no_grad():
@@ -57,13 +55,9 @@ class BERTEncoder:
 
                 outputs = self.model(**batch)
 
-                # Exclude padding and special tokens
-                mask = batch["attention_mask"] * (
-                    1 - special_mask[start:end].to(self.device)
-                )
-                mask = mask.unsqueeze(-1)
+                # Mean pooling with attention masking
+                mask = batch["attention_mask"].unsqueeze(-1)
 
-                # Sum token embeddings within each chunk
                 chunk_embeddings = (
                     outputs.last_hidden_state * mask
                 ).sum(dim=1)
@@ -72,7 +66,7 @@ class BERTEncoder:
 
                 mapping = article_mapping[start:end].to(self.device)
 
-                # Combine chunks belonging to the same article
+                # Combine chunks from the same article
                 article_embeddings.index_add_(
                     0, mapping, chunk_embeddings
                 )
@@ -81,7 +75,10 @@ class BERTEncoder:
                     0, mapping, chunk_counts
                 )
 
-        # Average across all content tokens in each article
+        # Weighted mean across article chunks
         embeddings = article_embeddings / token_counts.clamp_min(1)
+
+        # Normalize the final article embeddings
+        embeddings = F.normalize(embeddings, p=2, dim=-1)
 
         return embeddings.to("cpu", copy=True)
