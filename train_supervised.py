@@ -1,9 +1,9 @@
-import torch
+from metrics import EpochMetrics, classification_scores, evaluate_classifier
 
 # trains the ffn_model 
 def train_supervised(
     model, train_loader, valid_loader, criterion, optimizer, device, epochs,
-    validate_freq=2, print_interval=1
+    validate_freq=2, print_interval=1, history=None
 ):
 
     # Move model to GPU/CPU
@@ -43,32 +43,12 @@ def train_supervised(
             # Validation
             if counter % validate_freq == 0:
 
-                val_loss_total = 0.0
-                val_samples = 0
-
-                # Place model in evaluation mode
-                model.eval()
-
-                # Turn off gradient calculations
-                with torch.no_grad():
-
-                    for inputs, labels in valid_loader:
-
-                        inputs = inputs.to(device)
-                        labels = labels.to(device)
-
-                        output = model(inputs)
-
-                        val_loss = criterion(output.reshape(-1, output.size(-1)), labels.reshape(-1))
-
-                        val_loss_total += val_loss.item() * labels.numel()
-                        val_samples += labels.numel()
-
-                # Place model back in training mode
-                model.train()
-
-                average_val_loss = val_loss_total / val_samples
-
+                targets, predictions, average_val_loss = evaluate_classifier(
+                    model, valid_loader, device, criterion
+                )
+                if history is not None:
+                    scores = classification_scores(targets, predictions)
+                    history.append(EpochMetrics(epoch, *scores))
                 if epoch % print_interval == 0 or epoch == epochs:
                     print(
                         f"Epoch: {epoch}/{epochs} | "

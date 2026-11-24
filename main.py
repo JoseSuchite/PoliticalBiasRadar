@@ -14,6 +14,7 @@ from lstm import MulticlassLSTM
 from train_supervised import train_supervised
 from train_RL import rl_train
 from test_model import test_model
+from metrics import plot_learning_curves
 
 import argparse
 
@@ -24,9 +25,9 @@ DATASET_ID = "siddharthmb/article-bias-prediction-media-splits"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 SUPERVISED_EPOCHS = 10
-RL_EPOCHS = 1000
+RL_EPOCHS = 100
 SUPERVISED_PRINT_INTERVAL = 2  # Print progress every N epochs.
-RL_PRINT_INTERVAL = 100
+RL_PRINT_INTERVAL = 10
 LEARNING_RATE = 5e-4
 EPISODE_LENGTH = 10
 BATCH_SIZE = 32
@@ -44,7 +45,8 @@ def run_experiment(
     training_type,
     train_loader,
     valid_loader,
-    test_loader
+    test_loader,
+    history=None
 ):
 
     torch.manual_seed(SEED)
@@ -105,7 +107,8 @@ def run_experiment(
             device=DEVICE,
             epochs=SUPERVISED_EPOCHS,
             validate_freq=len(episode_train_loader),
-            print_interval=SUPERVISED_PRINT_INTERVAL
+            print_interval=SUPERVISED_PRINT_INTERVAL,
+            history=history
         )
 
     elif training_type == "rl":
@@ -116,7 +119,9 @@ def run_experiment(
             optimizer=optimizer,
             epochs=RL_EPOCHS,
             device=DEVICE,
-            print_interval=RL_PRINT_INTERVAL
+            print_interval=RL_PRINT_INTERVAL,
+            valid_loader=episode_valid_loader,
+            history=history
         )
 
     else:
@@ -159,6 +164,11 @@ def main():
         default=["supervised", "rl"]
     )
 
+    parser.add_argument(
+        "--show-charts",
+        action="store_true",
+        help="Open the validation charts in a Matplotlib window after training."
+    )
     args = parser.parse_args()
 
     # Generate BERT embeddings once
@@ -178,6 +188,7 @@ def main():
     # python main.py --model lstm --method supervised rl
 
     results = []
+    histories = {}
 
     for model_type in args.model:
 
@@ -190,13 +201,18 @@ def main():
                 f"==========\n"
             )
 
+            history = []
             test_acc, macro_f1 = run_experiment(
                 model_type,
                 training_type,
                 train_loader,
                 valid_loader,
-                test_loader
+                test_loader,
+                history=history
             )
+            if history:
+                label = f"{model_type.upper()} / {'RL' if training_type == 'rl' else 'Supervised'}"
+                histories[label] = history
 
             results.append((
                 model_type,
@@ -229,6 +245,11 @@ def main():
 
     # Free GPU resources after training and testing
     free_gpu_resources()
+
+    if histories:
+        chart_path = "runs/charts/learning_curves.png"
+        print(f"Validation charts: {chart_path}")
+        plot_learning_curves(histories, chart_path, show=args.show_charts)
 
 
 if __name__ == "__main__":

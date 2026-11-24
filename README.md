@@ -13,3 +13,11 @@ numpy
 pyarrow
 pathlib
 sklearn
+matplotlib
+
+## Learning curves
+
+`python main.py` saves validation accuracy and macro F1 by epoch to
+`runs/charts/learning_curves.png`. The figure includes every model and training method
+selected for that run. Use `python main.py --show-charts` to also open the figure
+in a Matplotlib window when training finishes.

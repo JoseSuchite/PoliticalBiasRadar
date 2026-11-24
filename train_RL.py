@@ -1,5 +1,7 @@
 import torch
 
+from metrics import EpochMetrics, classification_scores, evaluate_classifier
+
 def longest_streak_reward(actions, labels):
 
     correct = actions.eq(labels)
@@ -16,7 +18,10 @@ def longest_streak_reward(actions, labels):
     return longest.float()
 
 
-def rl_train(model, train_loader, optimizer, epochs, device, print_interval=1):
+def rl_train(
+    model, train_loader, optimizer, epochs, device, print_interval=1,
+    valid_loader=None, history=None
+):
 
     model.to(device)
     model.train()
@@ -73,6 +78,13 @@ def rl_train(model, train_loader, optimizer, epochs, device, print_interval=1):
             )
 
             optimizer.step()
+
+        if history is not None:
+            # Iterating a DataLoader draws a CPU seed even when it does not shuffle.
+            with torch.random.fork_rng(devices=[]):
+                targets, predictions, _ = evaluate_classifier(model, valid_loader, device)
+            scores = classification_scores(targets, predictions)
+            history.append(EpochMetrics(epoch, *scores))
 
         if total_episodes and (epoch % print_interval == 0 or epoch == epochs):
             print(
