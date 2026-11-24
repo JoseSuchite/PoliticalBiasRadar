@@ -2,17 +2,21 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModel
 
-MODEL_NAME = "sentence-transformers/all-mpnet-base-v2"
+ENCODER_MODELS = {
+    1: ("google-bert/bert-base-uncased", 512),
+    2: ("sentence-transformers/all-mpnet-base-v2", 384),
+}
 
 
-class BERTEncoder:
-    def __init__(self):
+class Encoder:
+    def __init__(self, model_name, max_length):
+        self.max_length = max_length
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
 
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        self.model = AutoModel.from_pretrained(MODEL_NAME)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name)
 
         self.model.to(self.device)
         self.model.eval()
@@ -26,7 +30,7 @@ class BERTEncoder:
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=384,
+            max_length=self.max_length,
             return_overflowing_tokens=True
         )
 

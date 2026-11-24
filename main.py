@@ -6,7 +6,7 @@ from datasets import load_dataset
 from pathlib import Path
 from torch.utils.data import DataLoader, TensorDataset, default_collate
 
-from bert_encoder import BERTEncoder, MODEL_NAME
+from encoder import Encoder, ENCODER_MODELS
 from load_dataset import create_data_loaders, create_episodes
 
 from feed_forward import MulticlassFFN
@@ -25,6 +25,7 @@ DATASET_ID = "siddharthmb/article-bias-prediction-media-splits"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+ENCODER_CHOICE = 2  # 1 = BERT, 2 = MPNet.
 SUPERVISED_EPOCHS = 10
 RL_EPOCHS = 10
 SUPERVISED_PRINT_INTERVAL = 2  # Print progress every N epochs.
@@ -180,7 +181,10 @@ def main():
     )
     args = parser.parse_args()
 
-    cache_name = MODEL_NAME.replace("/", "--") + ".pt"
+    if ENCODER_CHOICE not in ENCODER_MODELS:
+        parser.error("ENCODER_CHOICE must be 1 (BERT) or 2 (MPNet)")
+    model_name, max_length = ENCODER_MODELS[ENCODER_CHOICE]
+    cache_name = model_name.replace("/", "--") + ".pt"
     cache_path = Path(__file__).resolve().parent / "embeddings" / cache_name
     if cache_path.is_file():
         splits = torch.load(cache_path, map_location="cpu", weights_only=True)
@@ -190,7 +194,7 @@ def main():
         )
         print(f"Loaded encodings from {cache_path}")
     else:
-        encoder = BERTEncoder()
+        encoder = Encoder(model_name, max_length)
         train_loader, valid_loader, test_loader = create_data_loaders(encoder, batch_size=8)
         del encoder
         cache_path.parent.mkdir(parents=True, exist_ok=True)
