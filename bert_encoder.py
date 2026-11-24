@@ -16,24 +16,7 @@ class BERTEncoder:
         self.model.eval()
 
     def encode(self, article):
-        inputs = self.tokenizer(
-            article,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512
-        )
-
-        inputs = {
-            key: value.to(self.device)
-            for key, value in inputs.items()
-        }
-
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-
-        embedding = outputs.last_hidden_state[:, 0, :]
-
-        return embedding.to("cpu", copy=True)
+        return self.encode_batch([article])
 
     def encode_batch(self, articles):
         inputs = self.tokenizer(
@@ -52,6 +35,8 @@ class BERTEncoder:
         with torch.no_grad():
             outputs = self.model(**inputs)
 
-        embeddings = outputs.last_hidden_state[:, 0, :]
+        mask = inputs["attention_mask"].unsqueeze(-1)
+        embeddings = (outputs.last_hidden_state * mask).sum(dim=1)
+        embeddings = embeddings / mask.sum(dim=1).clamp_min(1)
 
         return embeddings.to("cpu", copy=True)

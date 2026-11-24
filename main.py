@@ -23,7 +23,10 @@ DATASET_ID = "siddharthmb/article-bias-prediction-media-splits"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-EPOCHS = 5
+SUPERVISED_EPOCHS = 10
+RL_EPOCHS = 1000
+SUPERVISED_PRINT_INTERVAL = 2  # Print progress every N epochs.
+RL_PRINT_INTERVAL = 100
 LEARNING_RATE = 5e-4
 EPISODE_LENGTH = 10
 BATCH_SIZE = 32
@@ -100,8 +103,9 @@ def run_experiment(
             criterion=criterion,
             optimizer=optimizer,
             device=DEVICE,
-            epochs=EPOCHS,
-            validate_freq=len(episode_train_loader)
+            epochs=SUPERVISED_EPOCHS,
+            validate_freq=len(episode_train_loader),
+            print_interval=SUPERVISED_PRINT_INTERVAL
         )
 
     elif training_type == "rl":
@@ -110,8 +114,9 @@ def run_experiment(
             model=model,
             train_loader=episode_train_loader,
             optimizer=optimizer,
-            epochs=EPOCHS,
-            device=DEVICE
+            epochs=RL_EPOCHS,
+            device=DEVICE,
+            print_interval=RL_PRINT_INTERVAL
         )
 
     else:
@@ -200,7 +205,7 @@ def main():
                 macro_f1
             ))
 
-    print("\n== RESULTS ==\n")
+    print("\n== FINAL RESULTS ==\n")
 
     print(
         f"{'Model':<12}"

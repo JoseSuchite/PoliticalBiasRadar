@@ -16,12 +16,13 @@ def longest_streak_reward(actions, labels):
     return longest.float()
 
 
-def rl_train(model, train_loader, optimizer, epochs, device):
+def rl_train(model, train_loader, optimizer, epochs, device, print_interval=1):
 
     model.to(device)
     model.train()
+    reward_baseline = 0.0
 
-    for epoch in range(epochs):
+    for epoch in range(1, epochs + 1):
 
         total_reward = 0
         total_correct = 0
@@ -46,27 +47,24 @@ def rl_train(model, train_loader, optimizer, epochs, device):
             correct = actions.eq(labels)
 
             # Calculate reward for each episode
-            rewards = longest_streak_reward(actions, labels)
+            correct_counts = correct.sum(dim=1)
+            rewards = correct_counts + longest_streak_reward(actions, labels)
 
             # Track total reward and accuracy
-            total_reward += rewards.sum().item()
+            batch_reward = rewards.sum().item()
+            total_reward += batch_reward
             total_episodes += rewards.numel()
 
-            total_correct += correct.sum().item()
+            total_correct += correct_counts.sum().item()
             total_samples += labels.numel()
 
-            # Flip one prediction at a time to measure its effect on the streak.
-            positions = torch.eye(labels.size(1), dtype=torch.bool, device=labels.device)
-            forced_correct = (correct.unsqueeze(1) | positions).flatten(0, 1).long()
-            forced_wrong = (correct.unsqueeze(1) & ~positions).flatten(0, 1).long()
-            targets = torch.ones_like(forced_correct)
-            reward_if_correct = longest_streak_reward(forced_correct, targets)
-            reward_if_wrong = longest_streak_reward(forced_wrong, targets)
-            credit = (reward_if_correct - reward_if_wrong).reshape_as(labels)
-            correct_probs = policy.probs.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
-            policy_loss = -(credit * correct_probs).sum(dim=1).mean()
+            # Weight sampled actions using the reward and the running baseline.
+            log_probs = policy.log_prob(actions).sum(dim=1)
+            advantages = rewards - reward_baseline
+            policy_loss = -(advantages * log_probs).mean()
             entropy = policy.entropy().mean()
             loss = policy_loss - 0.01 * entropy
+            reward_baseline = 0.9 * reward_baseline + 0.1 * (batch_reward / rewards.numel())
 
             loss.backward()
 
@@ -76,9 +74,9 @@ def rl_train(model, train_loader, optimizer, epochs, device):
 
             optimizer.step()
 
-        if total_episodes:
+        if total_episodes and (epoch % print_interval == 0 or epoch == epochs):
             print(
-                f"Epoch: {epoch + 1}/{epochs} | "
+                f"Epoch: {epoch}/{epochs} | "
                 f"Average Reward: {total_reward / total_episodes:.4f} | "
                 f"Training Accuracy: "
                 f"{total_correct / total_samples:.2%}"
