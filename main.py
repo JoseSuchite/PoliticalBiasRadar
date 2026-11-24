@@ -25,7 +25,7 @@ DATASET_ID = "siddharthmb/article-bias-prediction-media-splits"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 SUPERVISED_EPOCHS = 10
-RL_EPOCHS = 100
+RL_EPOCHS = 10
 SUPERVISED_PRINT_INTERVAL = 2  # Print progress every N epochs.
 RL_PRINT_INTERVAL = 10
 LEARNING_RATE = 5e-4
@@ -50,6 +50,9 @@ def run_experiment(
 ):
 
     torch.manual_seed(SEED)
+
+    if DEVICE.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(DEVICE)
 
     # Create model
     models = {
@@ -134,6 +137,11 @@ def run_experiment(
         criterion=criterion,
         device=DEVICE
     )
+    if DEVICE.type == "cuda":
+        peak_vram_mib = torch.cuda.max_memory_allocated(DEVICE) / 1024**2
+        print(f"Peak VRAM: {peak_vram_mib:.2f} MiB")
+    else:
+        print("Peak VRAM: N/A (CPU)")
 
     # Save model
     torch.save(
