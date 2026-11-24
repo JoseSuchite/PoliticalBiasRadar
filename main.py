@@ -3,6 +3,7 @@ import torch.nn as nn
 from datasets import load_dataset
 
 
+from functools import partial
 from pathlib import Path
 from torch.utils.data import DataLoader, TensorDataset, default_collate
 
@@ -19,13 +20,14 @@ from metrics import plot_learning_curves
 
 import argparse
 
-from gpu_cleanup import free_gpu_resources
+from gpu_cleanup import format_peak_vram, free_gpu_resources
 
 DATASET_ID = "siddharthmb/article-bias-prediction-media-splits"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ENCODER_CHOICE = 2  # 1 = BERT, 2 = MPNet.
+
 SUPERVISED_EPOCHS = 10
 RL_EPOCHS = 10
 SUPERVISED_PRINT_INTERVAL = 2  # Print progress every N epochs.
@@ -35,11 +37,40 @@ EPISODE_LENGTH = 10
 BATCH_SIZE = 32
 SEED = 0
 
+# LSTM hyperparameters
+LSTM_PROJECTION_DIM = 64
+LSTM_HIDDEN_DIM = 64
+LSTM_NUM_HIDDEN_LAYERS = 1
+LSTM_DROPOUT = 0.15
+LSTM_BIDIRECTIONAL = False  # Let predictions use later articles in the episode.
+
+# Data augmentation settings
+AUGMENTATION_PROBABILITY = 0.0  # Chance to add noise to each training article.
+AUGMENTATION_SIGMA = 0.005
+SHUFFLE_EPISODES_EACH_EPOCH = False  # Shuffle articles before regrouping them.
+
 
 def collate_episode(batch):
     inputs, labels = default_collate(batch)
 
     return inputs.unsqueeze(0), labels.unsqueeze(0)
+
+
+def shuffled_episode_loader(dataset, epoch):
+    generator = torch.Generator().manual_seed(SEED + epoch)
+    episodes = create_episodes(dataset, episode_length=EPISODE_LENGTH, generator=generator)
+    return DataLoader(episodes, batch_size=BATCH_SIZE, generator=generator)
+
+
+def augment_embeddings(inputs, *, generator):
+    mask = torch.rand(
+        (*inputs.shape[:-1], 1), device=inputs.device, generator=generator
+    ) < AUGMENTATION_PROBABILITY
+    noise = torch.randn(
+        inputs.shape, dtype=inputs.dtype, device=inputs.device, generator=generator
+    )
+    perturbed = nn.functional.normalize(inputs + AUGMENTATION_SIGMA * noise, dim=-1)
+    return torch.where(mask, perturbed, inputs)
 
 
 def run_experiment(
@@ -59,7 +90,14 @@ def run_experiment(
     # Create model
     models = {
         "ffn": MulticlassFFN,
-        "lstm": MulticlassLSTM
+        "lstm": partial(
+            MulticlassLSTM,
+            hidden_dim=LSTM_HIDDEN_DIM,
+            n_layers=LSTM_NUM_HIDDEN_LAYERS,
+            dropout_rate=LSTM_DROPOUT,
+            bidirectional=LSTM_BIDIRECTIONAL,
+            projection_dim=LSTM_PROJECTION_DIM
+        )
     }
 
     model = models[model_type]().to(DEVICE)
@@ -84,6 +122,14 @@ def run_experiment(
         shuffle=True,
         generator=torch.Generator().manual_seed(SEED)
     )
+
+    epoch_loader = None
+    if SHUFFLE_EPISODES_EACH_EPOCH:
+        epoch_loader = partial(shuffled_episode_loader, train_loader.dataset)
+    augment_batch = None
+    if AUGMENTATION_PROBABILITY > 0 and AUGMENTATION_SIGMA > 0:
+        noise_generator = torch.Generator(device=DEVICE).manual_seed(SEED)
+        augment_batch = partial(augment_embeddings, generator=noise_generator)
 
     # Preserve all validation and testing articles
     episode_valid_loader = DataLoader(
@@ -113,7 +159,9 @@ def run_experiment(
             epochs=SUPERVISED_EPOCHS,
             validate_freq=len(episode_train_loader),
             print_interval=SUPERVISED_PRINT_INTERVAL,
-            history=history
+            history=history,
+            epoch_loader=epoch_loader,
+            augment_batch=augment_batch
         )
 
     elif training_type == "rl":
@@ -126,7 +174,9 @@ def run_experiment(
             device=DEVICE,
             print_interval=RL_PRINT_INTERVAL,
             valid_loader=episode_valid_loader,
-            history=history
+            history=history,
+            epoch_loader=epoch_loader,
+            augment_batch=augment_batch
         )
 
     else:
@@ -139,11 +189,7 @@ def run_experiment(
         criterion=criterion,
         device=DEVICE
     )
-    if DEVICE.type == "cuda":
-        peak_vram_mib = torch.cuda.max_memory_allocated(DEVICE) / 1024**2
-        print(f"Peak VRAM: {peak_vram_mib:.2f} MiB")
-    else:
-        print("Peak VRAM: N/A (CPU)")
+    print(format_peak_vram(DEVICE))
 
     # Save model
     torch.save(
@@ -180,6 +226,11 @@ def main():
         help="Open the validation charts in a Matplotlib window after training."
     )
     args = parser.parse_args()
+
+    if not 0 <= AUGMENTATION_PROBABILITY <= 1:
+        parser.error("AUGMENTATION_PROBABILITY must be between 0 and 1")
+    if not AUGMENTATION_SIGMA >= 0:
+        parser.error("AUGMENTATION_SIGMA must be nonnegative")
 
     if ENCODER_CHOICE not in ENCODER_MODELS:
         parser.error("ENCODER_CHOICE must be 1 (BERT) or 2 (MPNet)")
@@ -234,8 +285,7 @@ def main():
                 history=history
             )
             if history:
-                label = f"{model_type.upper()} / {'RL' if training_type == 'rl' else 'Supervised'}"
-                histories[label] = history
+                histories.setdefault(training_type, {})[model_type.upper()] = history
 
             results.append((
                 model_type,
@@ -270,9 +320,7 @@ def main():
     free_gpu_resources()
 
     if histories:
-        chart_path = "runs/charts/learning_curves.png"
-        print(f"Validation charts: {chart_path}")
-        plot_learning_curves(histories, chart_path, show=args.show_charts)
+        plot_learning_curves(histories, "runs/charts", show=args.show_charts)
 
 
 if __name__ == "__main__":

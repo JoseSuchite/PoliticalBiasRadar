@@ -1,9 +1,10 @@
-from metrics import EpochMetrics, classification_scores, evaluate_classifier
+from gpu_cleanup import format_peak_vram
+from metrics import epoch_metrics, evaluate_classifier, training_evaluation_loader
 
 # trains the ffn_model 
 def train_supervised(
     model, train_loader, valid_loader, criterion, optimizer, device, epochs,
-    validate_freq=2, print_interval=1, history=None
+    validate_freq=2, print_interval=1, history=None, epoch_loader=None, augment_batch=None
 ):
 
     # Move model to GPU/CPU
@@ -14,16 +15,20 @@ def train_supervised(
 
     # Place model in training mode
     model.train()
+    train_eval_loader = training_evaluation_loader(train_loader) if history is not None else None
 
     # Train for some number of epochs while evaluating
     for epoch in range(1, epochs + 1):
         # Batch loop
-        for inputs, labels in train_loader:
+        batches = epoch_loader(epoch) if epoch_loader is not None else train_loader
+        for batch, (inputs, labels) in enumerate(batches, start=1):
             counter += 1
 
             # Move training data batch to GPU/CPU
             inputs = inputs.to(device)
             labels = labels.to(device)
+            if augment_batch is not None:
+                inputs = augment_batch(inputs)
 
             # Zero out gradients
             optimizer.zero_grad()
@@ -40,20 +45,22 @@ def train_supervised(
             # Update weights
             optimizer.step()
 
-            # Validation
-            if counter % validate_freq == 0:
+            validate = counter % validate_freq == 0
+            record_epoch = train_eval_loader is not None and batch == len(batches)
+            if validate or record_epoch:
 
                 targets, predictions, average_val_loss = evaluate_classifier(
-                    model, valid_loader, device, criterion
+                    model, valid_loader, device, criterion if validate else None
                 )
-                if history is not None:
-                    scores = classification_scores(targets, predictions)
-                    history.append(EpochMetrics(epoch, *scores))
-                if epoch % print_interval == 0 or epoch == epochs:
+                if record_epoch:
+                    history.append(epoch_metrics(
+                        epoch, model, train_eval_loader, device, targets, predictions
+                    ))
+                if validate and (epoch % print_interval == 0 or epoch == epochs):
                     print(
                         f"Epoch: {epoch}/{epochs} | "
                         f"Step: {counter} | "
                         f"Train Loss: {loss.item():.6f} | "
-                        f"Val Loss: {average_val_loss:.6f}"
+                        f"Val Loss: {average_val_loss:.6f} | {format_peak_vram(device)}"
                     )
 

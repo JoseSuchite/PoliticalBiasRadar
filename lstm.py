@@ -12,24 +12,27 @@ class MulticlassLSTM(nn.Module):
         hidden_dim=64,
         output_dim=3,
         n_layers=1,
-        dropout_rate=0.15
+        dropout_rate=0.15,
+        bidirectional=False,
+        projection_dim=None
     ):
         super().__init__()
 
-        self.projection = nn.Linear(
-            embedding_dim, hidden_dim
-        )
+        projection_dim = hidden_dim if projection_dim is None else projection_dim
+        self.projection = nn.Linear(embedding_dim, projection_dim)
 
         self.lstm = nn.LSTM(
-            hidden_dim,
-            hidden_dim,
+            input_size=projection_dim,
+            hidden_size=hidden_dim,
             num_layers=n_layers,
-            batch_first=True
+            batch_first=True,
+            bidirectional=bidirectional
         )
 
         self.dropout = nn.Dropout(dropout_rate)
 
-        self.fc = nn.Linear(hidden_dim, output_dim)
+        directions = 2 if bidirectional else 1
+        self.fc = nn.Linear(hidden_dim * directions, output_dim)
 
     def forward(self, x):
 

@@ -93,12 +93,12 @@ def create_data_loaders(encoder, batch_size=8):
 
     return train_loader, valid_loader, test_loader
 
-def create_episodes(dataset, episode_length=10, shuffle=True):
+def create_episodes(dataset, episode_length=10, shuffle=True, generator=None):
 
     embeddings, labels = dataset.tensors
 
     if shuffle:
-        indices = torch.randperm(len(labels))
+        indices = torch.randperm(len(labels), generator=generator)
         embeddings = embeddings[indices]
         labels = labels[indices]
 

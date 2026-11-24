@@ -3,6 +3,7 @@ from typing import NamedTuple
 
 import torch
 from sklearn.metrics import accuracy_score, f1_score
+from torch.utils.data import DataLoader
 
 
 CLASSES = (0, 1, 2)
@@ -10,8 +11,10 @@ CLASSES = (0, 1, 2)
 
 class EpochMetrics(NamedTuple):
     epoch: int
-    accuracy: float
-    macro_f1: float
+    train_accuracy: float
+    train_macro_f1: float
+    validation_accuracy: float
+    validation_macro_f1: float
 
 
 @torch.no_grad()
@@ -46,42 +49,73 @@ def classification_scores(targets, predictions):
     return accuracy, macro_f1
 
 
-def plot_learning_curves(histories, output_path, show=False):
-    """Save validation accuracy and macro F1 for each experiment in one figure."""
+def training_evaluation_loader(train_loader):
+    """Score the training episodes without advancing the training sampler."""
+    return DataLoader(
+        train_loader.dataset,
+        batch_size=256,
+        shuffle=False,
+        collate_fn=train_loader.collate_fn,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+
+def epoch_metrics(epoch, model, train_eval_loader, device, val_targets, val_predictions):
+    train_targets, train_predictions, _ = evaluate_classifier(model, train_eval_loader, device)
+    return EpochMetrics(
+        epoch,
+        *classification_scores(train_targets, train_predictions),
+        *classification_scores(val_targets, val_predictions),
+    )
+
+
+def plot_learning_curves(histories, output_dir, show=False):
+    """Save separate supervised and RL figures for greedy train and validation scores."""
     from matplotlib import pyplot as plt
     from matplotlib.ticker import MaxNLocator, PercentFormatter
 
-    fig, (accuracy_ax, f1_ax) = plt.subplots(
-        2, 1, sharex=True, figsize=(10, 7), layout="constrained"
-    )
-    fig.suptitle("Validation learning curves")
-    for label, history in histories.items():
-        epochs, accuracies, f1_scores = zip(*history)
-        marker_spacing = max(1, len(history) // 10)
-        accuracy_ax.plot(epochs, accuracies, label=label, marker="o",
-                         markersize=3, markevery=marker_spacing)
-        f1_ax.plot(epochs, f1_scores, marker="o", markersize=3, markevery=marker_spacing)
-
-    accuracy_ax.set_ylabel("Accuracy")
-    accuracy_ax.yaxis.set_major_formatter(PercentFormatter(xmax=1))
-    accuracy_ax.legend()
-    f1_ax.set_ylabel("Macro F1")
-    # Keep short supervised runs visible alongside much longer RL runs.
-    last_epochs = [history[-1].epoch for history in histories.values()]
-    if max(last_epochs) >= 10 * min(last_epochs):
-        f1_ax.set_xscale("log")
-        f1_ax.set_xlabel("Epoch (log scale)")
-    else:
-        f1_ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        f1_ax.set_xlabel("Epoch")
-    for ax in (accuracy_ax, f1_ax):
-        ax.grid(alpha=0.25)
-
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    titles = {
+        "supervised": "Supervised learning curves",
+        "rl": "Reinforcement learning curves",
+    }
+    colors = {
+        "train": {"FFN": "#8f3b0e", "LSTM": "#e28a3b"},
+        "validation": {"FFN": "#174295", "LSTM": "#2b83bf"},
+    }
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    figures = []
     try:
-        fig.savefig(output_path, dpi=160)
+        for method, model_histories in histories.items():
+            fig, (accuracy_ax, f1_ax) = plt.subplots(
+                2, 1, sharex=True, figsize=(10, 7), layout="constrained"
+            )
+            figures.append(fig)
+            fig.suptitle(titles[method])
+            for model, history in model_histories.items():
+                epochs = [point.epoch for point in history]
+                marker = "o" if len(history) <= 20 else None
+                for ax, metric in ((accuracy_ax, "accuracy"), (f1_ax, "macro_f1")):
+                    for split, style in (("train", "-"), ("validation", "--")):
+                        values = [getattr(point, f"{split}_{metric}") for point in history]
+                        ax.plot(
+                            epochs, values, label=f"{model} {split}",
+                            color=colors[split][model], linestyle=style, marker=marker, markersize=3
+                        )
+            accuracy_ax.set_ylabel("Accuracy")
+            accuracy_ax.yaxis.set_major_formatter(PercentFormatter(xmax=1))
+            accuracy_ax.legend(ncol=2)
+            f1_ax.set_ylabel("Macro F1")
+            f1_ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            f1_ax.set_xlabel("Epoch")
+            for ax in (accuracy_ax, f1_ax):
+                ax.grid(alpha=0.25)
+
+            output_path = output_dir / f"{method}_learning_curves.png"
+            fig.savefig(output_path, dpi=160)
+            print(f"Learning curves: {output_path.as_posix()}")
         if show:
             plt.show()
     finally:
-        plt.close(fig)
+        for fig in figures:
+            plt.close(fig)

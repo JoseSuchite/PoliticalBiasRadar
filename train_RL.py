@@ -1,6 +1,7 @@
 import torch
 
-from metrics import EpochMetrics, classification_scores, evaluate_classifier
+from gpu_cleanup import format_peak_vram
+from metrics import epoch_metrics, evaluate_classifier, training_evaluation_loader
 
 def longest_streak_reward(actions, labels):
 
@@ -20,12 +21,13 @@ def longest_streak_reward(actions, labels):
 
 def rl_train(
     model, train_loader, optimizer, epochs, device, print_interval=1,
-    valid_loader=None, history=None
+    valid_loader=None, history=None, epoch_loader=None, augment_batch=None
 ):
 
     model.to(device)
     model.train()
     reward_baseline = 0.0
+    train_eval_loader = training_evaluation_loader(train_loader) if history is not None else None
 
     for epoch in range(1, epochs + 1):
 
@@ -34,10 +36,13 @@ def rl_train(
         total_samples = 0
         total_episodes = 0
 
-        for inputs, labels in train_loader:
+        batches = epoch_loader(epoch) if epoch_loader is not None else train_loader
+        for inputs, labels in batches:
 
             inputs = inputs.to(device)
             labels = labels.to(device)
+            if augment_batch is not None:
+                inputs = augment_batch(inputs)
 
             optimizer.zero_grad()
 
@@ -83,14 +88,15 @@ def rl_train(
             # Iterating a DataLoader draws a CPU seed even when it does not shuffle.
             with torch.random.fork_rng(devices=[]):
                 targets, predictions, _ = evaluate_classifier(model, valid_loader, device)
-            scores = classification_scores(targets, predictions)
-            history.append(EpochMetrics(epoch, *scores))
+            history.append(epoch_metrics(
+                epoch, model, train_eval_loader, device, targets, predictions
+            ))
 
         if total_episodes and (epoch % print_interval == 0 or epoch == epochs):
             print(
                 f"Epoch: {epoch}/{epochs} | "
                 f"Average Reward: {total_reward / total_episodes:.4f} | "
-                f"Training Accuracy: "
-                f"{total_correct / total_samples:.2%}"
+                f"Training Sampled Accuracy: "
+                f"{total_correct / total_samples:.2%} | {format_peak_vram(device)}"
             )
 

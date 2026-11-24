@@ -3,6 +3,14 @@ import traceback
 import torch
 import gc
 
+def format_peak_vram(device):
+    device = torch.device(device)
+    if device.type != "cuda":
+        return f"Peak VRAM: N/A ({device.type.upper()})"
+    peak_mib = torch.cuda.max_memory_allocated(device) / 1024**2
+    return f"Peak VRAM: {peak_mib:.2f} MiB"
+
+
 def release_gpu():
     """Release optimizer/module caches and CUDA workspaces after model disposal."""
 
