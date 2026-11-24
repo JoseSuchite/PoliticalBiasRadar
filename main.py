@@ -3,9 +3,10 @@ import torch.nn as nn
 from datasets import load_dataset
 
 
-from torch.utils.data import DataLoader, default_collate
+from pathlib import Path
+from torch.utils.data import DataLoader, TensorDataset, default_collate
 
-from bert_encoder import BERTEncoder
+from bert_encoder import BERTEncoder, MODEL_NAME
 from load_dataset import create_data_loaders, create_episodes
 
 from feed_forward import MulticlassFFN
@@ -179,15 +180,25 @@ def main():
     )
     args = parser.parse_args()
 
-    # Generate BERT embeddings once
-    encoder = BERTEncoder()
-
-    train_loader, valid_loader, test_loader = create_data_loaders(
-        encoder,
-        batch_size=8
-    )
-
-    del encoder
+    cache_name = MODEL_NAME.replace("/", "--") + ".pt"
+    cache_path = Path(__file__).resolve().parent / "embeddings" / cache_name
+    if cache_path.is_file():
+        splits = torch.load(cache_path, map_location="cpu", weights_only=True)
+        train_loader, valid_loader, test_loader = (
+            DataLoader(TensorDataset(*tensors), batch_size=8, shuffle=(index == 0))
+            for index, tensors in enumerate(splits)
+        )
+        print(f"Loaded encodings from {cache_path}")
+    else:
+        encoder = BERTEncoder()
+        train_loader, valid_loader, test_loader = create_data_loaders(encoder, batch_size=8)
+        del encoder
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            [loader.dataset.tensors for loader in (train_loader, valid_loader, test_loader)],
+            cache_path
+        )
+        print(f"Saved encodings to {cache_path}")
 
 
     # Run experiments for all combinations of model and training method
