@@ -35,6 +35,7 @@ embedding_dim = 768
 output_dim = 3
 
 # Changeable parameters
+# Changing parameters here will have no effect if running from main
 #----------------------
 # hidden_dim should be a power of 2
 hidden_dim = 64
