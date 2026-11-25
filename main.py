@@ -31,8 +31,8 @@ EMBEDDINGS_MODE = 1  # 1 = mean pooling, 2 = concatenate chunks.
 MAX_EMBEDDING_CHUNKS = 8
 
 SUPERVISED_EPOCHS = 10
-RL_EPOCHS = 10
-RL_ENTROPY_COEFFICIENT = 0.01
+RL_EPOCHS = 400
+RL_ENTROPY_COEFFICIENT = 0.005
 SUPERVISED_PRINT_INTERVAL = 2  # Print progress every N epochs.
 RL_PRINT_INTERVAL = 10
 LEARNING_RATE = 5e-4
@@ -41,15 +41,15 @@ BATCH_SIZE = 32
 SEED = 0
 
 # LSTM hyperparameters
-LSTM_PROJECTION_DIM = 64
-LSTM_HIDDEN_DIM = 64
-LSTM_NUM_HIDDEN_LAYERS = 1
+LSTM_PROJECTION_DIM = 12000
+LSTM_HIDDEN_DIM = 128
+LSTM_NUM_HIDDEN_LAYERS = 2
 LSTM_DROPOUT = 0.15
 LSTM_BIDIRECTIONAL = False  # Let predictions use later articles in the episode.
 
 # Data augmentation settings
 AUGMENTATION_PROBABILITY = 0.0  # Chance to add noise to each training article.
-AUGMENTATION_SIGMA = 0.005
+AUGMENTATION_SIGMA = 0.01
 SHUFFLE_EPISODES_EACH_EPOCH = False  # Shuffle articles before regrouping them.
 
 
