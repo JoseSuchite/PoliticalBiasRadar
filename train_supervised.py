@@ -1,5 +1,5 @@
 from gpu_cleanup import format_peak_vram
-from metrics import epoch_metrics, evaluate_classifier, training_evaluation_loader
+from metrics import classification_scores, epoch_metrics, evaluate_classifier, training_evaluation_loader
 
 # trains the ffn_model 
 def train_supervised(
@@ -57,10 +57,15 @@ def train_supervised(
                         epoch, model, train_eval_loader, device, targets, predictions
                     ))
                 if validate and (epoch % print_interval == 0 or epoch == epochs):
+                    if record_epoch:
+                        validation_accuracy = history[-1].validation_accuracy
+                    else:
+                        validation_accuracy, _ = classification_scores(targets, predictions)
                     print(
                         f"Epoch: {epoch}/{epochs} | "
                         f"Step: {counter} | "
                         f"Train Loss: {loss.item():.6f} | "
-                        f"Val Loss: {average_val_loss:.6f} | {format_peak_vram(device)}"
+                        f"Val Loss: {average_val_loss:.6f} | "
+                        f"Validation Accuracy: {validation_accuracy:.2%} | {format_peak_vram(device)}"
                     )
 

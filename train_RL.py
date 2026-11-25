@@ -94,10 +94,14 @@ def rl_train(
             ))
 
         if total_episodes and (epoch % print_interval == 0 or epoch == epochs):
+            validation = (
+                f" | Validation Accuracy: {history[-1].validation_accuracy:.2%}"
+                if history else ""
+            )
             print(
                 f"Epoch: {epoch}/{epochs} | "
                 f"Average Reward: {total_reward / total_episodes:.4f} | "
                 f"Training Sampled Accuracy: "
-                f"{total_correct / total_samples:.2%} | {format_peak_vram(device)}"
+                f"{total_correct / total_samples:.2%}{validation} | {format_peak_vram(device)}"
             )
 
