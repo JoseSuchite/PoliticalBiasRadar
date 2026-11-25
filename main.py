@@ -42,9 +42,9 @@ SEED = 0
 
 # LSTM hyperparameters
 LSTM_PROJECTION_DIM = 12000
-LSTM_HIDDEN_DIM = 128
+LSTM_HIDDEN_DIM = 100
 LSTM_NUM_HIDDEN_LAYERS = 2
-LSTM_DROPOUT = 0.15
+LSTM_DROPOUT = 0.27
 LSTM_BIDIRECTIONAL = False  # Let predictions use later articles in the episode.
 
 # Data augmentation settings
