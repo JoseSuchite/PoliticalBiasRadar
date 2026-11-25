@@ -27,9 +27,12 @@ DATASET_ID = "siddharthmb/article-bias-prediction-media-splits"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ENCODER_CHOICE = 2  # 1 = BERT, 2 = MPNet.
+EMBEDDINGS_MODE = 1  # 1 = mean pooling, 2 = concatenate chunks.
+MAX_EMBEDDING_CHUNKS = 8
 
 SUPERVISED_EPOCHS = 10
 RL_EPOCHS = 10
+RL_ENTROPY_COEFFICIENT = 0.01
 SUPERVISED_PRINT_INTERVAL = 2  # Print progress every N epochs.
 RL_PRINT_INTERVAL = 10
 LEARNING_RATE = 5e-4
@@ -69,6 +72,10 @@ def augment_embeddings(inputs, *, generator):
     noise = torch.randn(
         inputs.shape, dtype=inputs.dtype, device=inputs.device, generator=generator
     )
+    if EMBEDDINGS_MODE == 2:
+        chunks = inputs.unflatten(-1, (MAX_EMBEDDING_CHUNKS, -1))
+        present = chunks.ne(0).any(dim=-1, keepdim=True)
+        noise = (noise.reshape_as(chunks) * present).reshape_as(inputs)
     perturbed = nn.functional.normalize(inputs + AUGMENTATION_SIGMA * noise, dim=-1)
     return torch.where(mask, perturbed, inputs)
 
@@ -87,11 +94,13 @@ def run_experiment(
     if DEVICE.type == "cuda":
         torch.cuda.reset_peak_memory_stats(DEVICE)
 
-    # Create model
+    # Create model for the selected embedding width.
+    embedding_dim = train_loader.dataset.tensors[0].size(-1)
     models = {
-        "ffn": MulticlassFFN,
+        "ffn": partial(MulticlassFFN, embedding_dim=embedding_dim),
         "lstm": partial(
             MulticlassLSTM,
+            embedding_dim=embedding_dim,
             hidden_dim=LSTM_HIDDEN_DIM,
             n_layers=LSTM_NUM_HIDDEN_LAYERS,
             dropout_rate=LSTM_DROPOUT,
@@ -173,6 +182,7 @@ def run_experiment(
             epochs=RL_EPOCHS,
             device=DEVICE,
             print_interval=RL_PRINT_INTERVAL,
+            entropy_coefficient=RL_ENTROPY_COEFFICIENT,
             valid_loader=episode_valid_loader,
             history=history,
             epoch_loader=epoch_loader,
@@ -231,11 +241,19 @@ def main():
         parser.error("AUGMENTATION_PROBABILITY must be between 0 and 1")
     if not AUGMENTATION_SIGMA >= 0:
         parser.error("AUGMENTATION_SIGMA must be nonnegative")
+    if not RL_ENTROPY_COEFFICIENT >= 0:
+        parser.error("RL_ENTROPY_COEFFICIENT must be nonnegative")
 
     if ENCODER_CHOICE not in ENCODER_MODELS:
         parser.error("ENCODER_CHOICE must be 1 (BERT) or 2 (MPNet)")
+    if EMBEDDINGS_MODE not in (1, 2):
+        parser.error("EMBEDDINGS_MODE must be 1 (mean pooling) or 2 (concatenation)")
     model_name, max_length = ENCODER_MODELS[ENCODER_CHOICE]
-    cache_name = model_name.replace("/", "--") + ".pt"
+    max_chunks = MAX_EMBEDDING_CHUNKS if EMBEDDINGS_MODE == 2 else None
+    if max_chunks is not None and max_chunks < 1:
+        parser.error("MAX_EMBEDDING_CHUNKS must be positive")
+    cache_suffix = f"--concat-{max_chunks}" if max_chunks is not None else ""
+    cache_name = model_name.replace("/", "--") + cache_suffix + ".pt"
     cache_path = Path(__file__).resolve().parent / "embeddings" / cache_name
     if cache_path.is_file():
         splits = torch.load(cache_path, map_location="cpu", weights_only=True)
@@ -245,7 +263,7 @@ def main():
         )
         print(f"Loaded encodings from {cache_path}")
     else:
-        encoder = Encoder(model_name, max_length)
+        encoder = Encoder(model_name, max_length, max_chunks=max_chunks)
         train_loader, valid_loader, test_loader = create_data_loaders(encoder, batch_size=8)
         del encoder
         cache_path.parent.mkdir(parents=True, exist_ok=True)

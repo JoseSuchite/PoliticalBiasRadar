@@ -15,6 +15,15 @@ pathlib
 sklearn
 matplotlib
 
+## Embedding modes
+
+Set `EMBEDDINGS_MODE` in `main.py` to choose how the encoder combines chunks.
+Mode `1` averages the chunks into one vector per article and is the default.
+Mode `2` concatenates up to `MAX_EMBEDDING_CHUNKS` chunk vectors in article
+order. The default cap of eight produces 6,144 features per article. Shorter
+articles are zero-padded, and longer ones keep their first chunks up to the
+cap. Concatenated embeddings use a separate local cache.
+
 ## LSTM settings
 
 Set `LSTM_PROJECTION_DIM` in `main.py` to control the width of the learned
@@ -30,6 +39,12 @@ Set `LSTM_BIDIRECTIONAL` in `main.py` to `True` when the whole episode is
 available before predictions. Each prediction can then use earlier and later
 articles in that episode. The default is `False`.
 
+## RL settings
+
+Set `RL_ENTROPY_COEFFICIENT` in `main.py` to control the weight of the entropy
+bonus during RL training. It defaults to `0.01`. Set it to `0.0` to disable
+the bonus.
+
 ## Training augmentation
 
 Set `AUGMENTATION_PROBABILITY` in `main.py` to the chance of adding Gaussian
@@ -37,6 +52,10 @@ noise to each training article embedding. `AUGMENTATION_SIGMA` is the noise
 standard deviation. Set `SHUFFLE_EPISODES_EACH_EPOCH` to `True` to shuffle
 articles before forming episodes each epoch. Both options are off by default.
 Learning curves use clean embeddings and fixed evaluation episodes.
+
+Noise is added per feature before the article vector is renormalized. A large
+sigma can overwhelm the article signal, especially in concatenation mode.
+Start with a small value such as `0.005` when comparing embedding modes.
 
 ## Learning curves
 

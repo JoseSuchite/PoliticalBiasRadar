@@ -9,7 +9,10 @@ ENCODER_MODELS = {
 
 
 class Encoder:
-    def __init__(self, model_name, max_length):
+    def __init__(self, model_name, max_length, max_chunks=None):
+        if max_chunks is not None and max_chunks < 1:
+            raise ValueError("max_chunks must be positive")
+        self.max_chunks = max_chunks
         self.max_length = max_length
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
@@ -35,15 +38,25 @@ class Encoder:
         )
 
         article_mapping = inputs.pop("overflow_to_sample_mapping")
+        slots_per_article = self.max_chunks if self.max_chunks is not None else 1
+        embedding_rows = len(articles) * slots_per_article
+        if self.max_chunks is not None:
+            # The tokenizer emits each article's chunks consecutively in order.
+            chunks_per_article = torch.bincount(article_mapping, minlength=len(articles))
+            first_chunk = chunks_per_article.cumsum(0) - chunks_per_article
+            slot = torch.arange(len(article_mapping)) - first_chunk[article_mapping]
+            keep = slot < self.max_chunks
+            inputs = {key: value[keep] for key, value in inputs.items()}
+            article_mapping = article_mapping[keep] * slots_per_article + slot[keep]
 
-        article_embeddings = torch.zeros(
-            len(articles),
+        embedding_sums = torch.zeros(
+            embedding_rows,
             self.model.config.hidden_size,
             device=self.device
         )
 
         token_counts = torch.zeros(
-            len(articles), 1, device=self.device
+            embedding_rows, 1, device=self.device
         )
 
         chunk_batch_size = 8
@@ -70,17 +83,16 @@ class Encoder:
 
                 mapping = article_mapping[start:end].to(self.device)
 
-                # Combine chunks from the same article
-                article_embeddings.index_add_(
-                    0, mapping, chunk_embeddings
-                )
+                # Add to the article row, or to an individual chunk slot.
+                embedding_sums.index_add_(0, mapping, chunk_embeddings)
 
                 token_counts.index_add_(
                     0, mapping, chunk_counts
                 )
 
-        # Weighted mean across article chunks
-        embeddings = article_embeddings / token_counts.clamp_min(1)
+        # Average the pooled article or each chunk slot, then flatten to one row per article.
+        embeddings = embedding_sums / token_counts.clamp_min(1)
+        embeddings = embeddings.reshape(len(articles), -1)
 
         # Normalize the final article embeddings
         embeddings = F.normalize(embeddings, p=2, dim=-1)

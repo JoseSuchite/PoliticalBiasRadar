@@ -21,7 +21,8 @@ def longest_streak_reward(actions, labels):
 
 def rl_train(
     model, train_loader, optimizer, epochs, device, print_interval=1,
-    valid_loader=None, history=None, epoch_loader=None, augment_batch=None
+    valid_loader=None, history=None, epoch_loader=None, augment_batch=None,
+    entropy_coefficient=0.01
 ):
 
     model.to(device)
@@ -73,7 +74,7 @@ def rl_train(
             advantages = rewards - reward_baseline
             policy_loss = -(advantages * log_probs).mean()
             entropy = policy.entropy().mean()
-            loss = policy_loss - 0.01 * entropy
+            loss = policy_loss - entropy_coefficient * entropy
             reward_baseline = 0.9 * reward_baseline + 0.1 * (batch_reward / rewards.numel())
 
             loss.backward()
