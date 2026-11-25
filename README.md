@@ -61,6 +61,7 @@ Start with a small value such as `0.005` when comparing embedding modes.
 
 `python main.py` saves a separate figure for each selected training method under
 `runs/charts/`: `supervised_learning_curves.png` and `rl_learning_curves.png`.
-Both plot training and validation accuracy and macro F1 by epoch. The figures
-use greedy predictions from the same end-of-epoch weights for both splits.
+Both plot training and validation accuracy and macro F1 by epoch, using
+seeded sampling from the same end-of-epoch weights for both splits. Final
+test accuracy and macro F1 also use seeded sampling.
 Use `python main.py --show-charts` to open the figures when training finishes.

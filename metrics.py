@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 
 
 CLASSES = (0, 1, 2)
+EVALUATION_SEED = 0
 
 
 class EpochMetrics(NamedTuple):
@@ -19,7 +20,8 @@ class EpochMetrics(NamedTuple):
 
 @torch.no_grad()
 def evaluate_classifier(model, loader, device, criterion=None):
-    """Collect article predictions and optionally compute average loss."""
+    """Sample one prediction per article with a repeatable evaluation seed."""
+    generator = torch.Generator(device=device).manual_seed(EVALUATION_SEED)
     was_training = model.training
     model.eval()
     targets = []
@@ -28,11 +30,13 @@ def evaluate_classifier(model, loader, device, criterion=None):
     try:
         for inputs, labels in loader:
             output = model(inputs.to(device))
+            logits = output.reshape(-1, output.size(-1))
             labels = labels.reshape(-1)
             targets.extend(labels.tolist())
-            predictions.append(output.argmax(dim=-1).reshape(-1))
+            probabilities = logits.softmax(dim=-1)
+            predictions.append(torch.multinomial(probabilities, 1, generator=generator).squeeze(1))
             if criterion is not None:
-                loss = criterion(output.reshape(-1, output.size(-1)), labels.to(device))
+                loss = criterion(logits, labels.to(device))
                 total_loss += loss.item() * labels.numel()
     finally:
         model.train(was_training)
@@ -70,7 +74,7 @@ def epoch_metrics(epoch, model, train_eval_loader, device, val_targets, val_pred
 
 
 def plot_learning_curves(histories, output_dir, show=False):
-    """Save separate supervised and RL figures for greedy train and validation scores."""
+    """Save separate supervised and RL figures for sampled train and validation scores."""
     from matplotlib import pyplot as plt
     from matplotlib.ticker import MaxNLocator, PercentFormatter
 
@@ -91,7 +95,7 @@ def plot_learning_curves(histories, output_dir, show=False):
                 2, 1, sharex=True, figsize=(10, 7), layout="constrained"
             )
             figures.append(fig)
-            fig.suptitle(titles[method])
+            fig.suptitle(f"{titles[method]}\nSampled predictions")
             for model, history in model_histories.items():
                 epochs = [point.epoch for point in history]
                 marker = "o" if len(history) <= 20 else None

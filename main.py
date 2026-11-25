@@ -304,6 +304,12 @@ def main():
             )
             if history:
                 histories.setdefault(training_type, {})[model_type.upper()] = history
+                final_validation = history[-1]
+                print(
+                    f"Sampled validation at epoch {final_validation.epoch}: "
+                    f"Accuracy {final_validation.validation_accuracy:.2%} | "
+                    f"Macro F1 {final_validation.validation_macro_f1:.4f}"
+                )
 
             results.append((
                 model_type,
@@ -312,7 +318,7 @@ def main():
                 macro_f1
             ))
 
-    print("\n== FINAL RESULTS ==\n")
+    print("\n== FINAL TEST RESULTS ==\n")
 
     print(
         f"{'Model':<12}"

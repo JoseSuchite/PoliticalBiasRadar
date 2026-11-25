@@ -8,6 +8,7 @@ def test_model(model, test_loader, criterion, device):
     true_list, pred_list, average_test_loss = evaluate_classifier(
         model, test_loader, device, criterion
     )
+    print("Test predictions: sampled")
     print(confusion_matrix(true_list, pred_list, labels=CLASSES))
     print()
 
