@@ -21,6 +21,7 @@ env/
 *.pt
 *.pth
 *.ckpt
+*.pkl
 
 # Dataset splits downloaded from Hugging Face
 /train-00000-of-00001.parquet
