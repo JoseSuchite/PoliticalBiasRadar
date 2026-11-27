@@ -93,9 +93,33 @@ def create_data_loaders(encoder, batch_size=8):
 
     return train_loader, valid_loader, test_loader
 
-def create_episodes(dataset, episode_length=10, shuffle=True, generator=None):
+def balanced_episode_indices(labels, episode_length, shuffle=True, generator=None):
+    per_class, remainder = divmod(episode_length, 3)
+    if per_class < 1 or remainder:
+        raise ValueError("Balanced episodes require a positive episode length divisible by 3.")
 
+    indices = torch.randperm(len(labels), generator=generator) if shuffle else torch.arange(len(labels))
+    ordered_labels = labels[indices]
+    class_indices = [indices[ordered_labels == label] for label in range(3)]
+    n_episodes = min(len(pool) for pool in class_indices) // per_class
+    groups = torch.cat([
+        pool[:n_episodes * per_class].reshape(n_episodes, per_class) for pool in class_indices
+    ], dim=1)
+    if shuffle:
+        order = torch.rand(groups.shape, generator=generator).argsort(dim=1)
+        groups = groups.gather(1, order)
+    return groups
+
+
+def create_episodes(
+    dataset, episode_length=10, shuffle=True, generator=None, *, balance_classes=False
+):
     embeddings, labels = dataset.tensors
+    if balance_classes:
+        groups = balanced_episode_indices(labels, episode_length, shuffle=shuffle, generator=generator)
+        if len(groups) == 0:
+            raise ValueError("Each class needs enough training articles for at least one episode.")
+        return TensorDataset(embeddings[groups], labels[groups])
 
     if shuffle:
         indices = torch.randperm(len(labels), generator=generator)

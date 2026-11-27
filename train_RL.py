@@ -22,7 +22,8 @@ def longest_streak_reward(actions, labels):
 def rl_train(
     model, train_loader, optimizer, epochs, device, print_interval=1,
     valid_loader=None, history=None, epoch_loader=None, augment_batch=None,
-    entropy_coefficient=0.01
+    entropy_coefficient=0.01, prepare_epoch=None, augmentation_sigma=0.0,
+    streak_reward_weight=0.25
 ):
 
     model.to(device)
@@ -31,6 +32,10 @@ def rl_train(
     train_eval_loader = training_evaluation_loader(train_loader) if history is not None else None
 
     for epoch in range(1, epochs + 1):
+
+        epoch_augment, schedule = (
+            prepare_epoch(epoch) if prepare_epoch is not None else (augment_batch, "")
+        )
 
         total_reward = 0
         total_correct = 0
@@ -42,8 +47,8 @@ def rl_train(
 
             inputs = inputs.to(device)
             labels = labels.to(device)
-            if augment_batch is not None:
-                inputs = augment_batch(inputs)
+            if epoch_augment is not None:
+                inputs = epoch_augment(inputs)
 
             optimizer.zero_grad()
 
@@ -59,7 +64,7 @@ def rl_train(
 
             # Calculate reward for each episode
             correct_counts = correct.sum(dim=1)
-            rewards = correct_counts + longest_streak_reward(actions, labels)
+            rewards = correct_counts + streak_reward_weight * longest_streak_reward(actions, labels)
 
             # Track total reward and accuracy
             batch_reward = rewards.sum().item()
@@ -95,13 +100,23 @@ def rl_train(
 
         if total_episodes and (epoch % print_interval == 0 or epoch == epochs):
             validation = (
-                f" | Validation Accuracy: {history[-1].validation_accuracy:.2%}"
+                f" Validation Accuracy: {history[-1].validation_accuracy:.2%} |"
                 if history else ""
             )
+            if not schedule:
+                learning_rate = optimizer.param_groups[0]["lr"]
+                schedule = f"LR: {learning_rate:.2e} | Sigma: {augmentation_sigma:.4f}"
+
+            lr_text, _, sigma_text = schedule.partition(" | ")
+            epoch_text = f"Epoch: {epoch}/{epochs}"
+            reward_text = f"Average Reward: {total_reward / total_episodes:.3f}"
+            accuracy_text = f"Training Sampled Accuracy: {total_correct / total_samples:.2%}"
+            peak_text = format_peak_vram(device, label="Peak")
+            first_column_width = max(24, len(epoch_text), len(reward_text), len(lr_text), len(peak_text))
             print(
-                f"Epoch: {epoch}/{epochs} | "
-                f"Average Reward: {total_reward / total_episodes:.4f} | "
-                f"Training Sampled Accuracy: "
-                f"{total_correct / total_samples:.2%}{validation} | {format_peak_vram(device)}"
+                f"\n| {epoch_text:<{first_column_width}} |\n"
+                f"| {reward_text:<{first_column_width}} | {accuracy_text:<34} |{validation}\n"
+                f"| {lr_text:<{first_column_width}} | {sigma_text:<34} |\n"
+                f"| {peak_text:<{first_column_width}} |"
             )
 

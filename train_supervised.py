@@ -4,7 +4,8 @@ from metrics import classification_scores, epoch_metrics, evaluate_classifier, t
 # trains the ffn_model 
 def train_supervised(
     model, train_loader, valid_loader, criterion, optimizer, device, epochs,
-    validate_freq=2, print_interval=1, history=None, epoch_loader=None, augment_batch=None
+    validate_freq=2, print_interval=1, history=None, epoch_loader=None, augment_batch=None,
+    prepare_epoch=None
 ):
 
     # Move model to GPU/CPU
@@ -19,6 +20,10 @@ def train_supervised(
 
     # Train for some number of epochs while evaluating
     for epoch in range(1, epochs + 1):
+        epoch_augment, schedule = (
+            prepare_epoch(epoch) if prepare_epoch is not None else (augment_batch, "")
+        )
+        schedule_suffix = f" | {schedule}" if schedule else ""
         # Batch loop
         batches = epoch_loader(epoch) if epoch_loader is not None else train_loader
         for batch, (inputs, labels) in enumerate(batches, start=1):
@@ -27,8 +32,8 @@ def train_supervised(
             # Move training data batch to GPU/CPU
             inputs = inputs.to(device)
             labels = labels.to(device)
-            if augment_batch is not None:
-                inputs = augment_batch(inputs)
+            if epoch_augment is not None:
+                inputs = epoch_augment(inputs)
 
             # Zero out gradients
             optimizer.zero_grad()
@@ -66,6 +71,7 @@ def train_supervised(
                         f"Step: {counter} | "
                         f"Train Loss: {loss.item():.6f} | "
                         f"Val Loss: {average_val_loss:.6f} | "
-                        f"Validation Accuracy: {validation_accuracy:.2%} | {format_peak_vram(device)}"
+                        f"Validation Accuracy: {validation_accuracy:.2%}{schedule_suffix} | "
+                        f"{format_peak_vram(device)}"
                     )
 
